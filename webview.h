@@ -63,6 +63,7 @@ struct webview {
   int width;
   int height;
   int resizable;
+  unsigned long bgcolor;
   int debug;
   webview_external_invoke_cb_t external_invoke_cb;
   struct webview_priv priv;
@@ -121,13 +122,14 @@ static void webview_debug(const char *format, ...);
 static void webview_print_log(const char *s);
 
 static int webview(const char *title, const char *url, int w, int h,
-                   int resizable) {
+                   int resizable, unsigned long bgcolor) {
   struct webview webview = {0};
   webview.title = title;
   webview.url = url;
   webview.width = w;
   webview.height = h;
   webview.resizable = resizable;
+  webview.bgcolor = bgcolor;
   int r = webview_init(&webview);
   if (r != 0) {
     return r;
@@ -1507,6 +1509,13 @@ static void webview_external_invoke(id self, SEL cmd, id arg) {
   w->external_invoke_cb(w, [(NSString *)(arg)UTF8String]);
 }
 
+static NSColor *webview_nscolor_from_hex(unsigned long color) {
+  return [NSColor colorWithSRGBRed:((color >> 16) & 0xff) / 255.0
+                             green:((color >> 8) & 0xff) / 255.0
+                              blue:(color & 0xff) / 255.0
+                             alpha:1.0];
+}
+
 static int webview_init(struct webview *w) {
   w->priv.pool = [[NSAutoreleasePool alloc] init];
   [NSApplication sharedApplication];
@@ -1543,6 +1552,9 @@ static int webview_init(struct webview *w) {
   [w->priv.window autorelease];
   [w->priv.window setTitle:nsTitle];
   [w->priv.window setDelegate:w->priv.windowDelegate];
+  [w->priv.window setBackgroundColor:webview_nscolor_from_hex(w->bgcolor)];
+  [[[[[w->priv.window contentView] superview] subviews] lastObject]
+      setBackgroundColor:[NSColor windowBackgroundColor]]; /* Titlebar */
   [w->priv.window center];
 
   [[NSUserDefaults standardUserDefaults] setBool:!!w->debug
@@ -1554,6 +1566,7 @@ static int webview_init(struct webview *w) {
       URLWithString:[NSString stringWithUTF8String:webview_check_url(w->url)]];
   [[w->priv.webview mainFrame] loadRequest:[NSURLRequest requestWithURL:nsURL]];
 
+  [w->priv.webview setDrawsBackground:NO];
   [w->priv.webview setAutoresizesSubviews:YES];
   [w->priv.webview
       setAutoresizingMask:NSViewWidthSizable | NSViewHeightSizable];
